@@ -3,17 +3,18 @@ import os
 import queue
 import signal
 import sys
-from argparse import ArgumentParser
-from typing import Any
-
 import structlog
 import uvicorn
+
+from argparse import ArgumentParser
+from cog.logging import setup_logging
+from typing import Any
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-from ..logging import setup_logging
+
 from .director import Director
 from .health_checker import Healthchecker, http_fetcher
 from .http import Server, create_app
