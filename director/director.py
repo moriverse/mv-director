@@ -1,21 +1,20 @@
-import datetime
 import json
 import queue
 import signal
 import time
-from typing import Any, Callable, Dict, List, Optional
-
 import requests
 import structlog
+
+from cog import schema
+from cog.server.http import Health
+from cog.server.probes import ProbeHelper
+from cog.server.webhook import requests_session, webhook_caller
 from opentelemetry import trace
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry  # type: ignore
+from typing import Any, Callable, Dict, List, Optional
 
-from .. import schema
-from ..server.http import Health
-from ..server.probes import ProbeHelper
-from ..server.webhook import requests_session, webhook_caller
-from .eventtypes import HealthcheckStatus, Webhook
+from .event_types import HealthcheckStatus, Webhook
 from .health_checker import Healthchecker
 from .monitor import Monitor, span_attributes_from_env
 from .prediction_tracker import PredictionTracker

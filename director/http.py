@@ -1,14 +1,15 @@
 import queue
 import threading
-from typing import Any
-
 import structlog
 import uvicorn
+
+from cog import schema
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from typing import Any
 
-from .. import schema
-from .eventtypes import Webhook
+from .event_types import Webhook
+
 
 log = structlog.get_logger(__name__)
 

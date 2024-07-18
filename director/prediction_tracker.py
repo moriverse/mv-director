@@ -1,8 +1,8 @@
+from cog import schema
+from cog.json import make_encodeable
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
 
-from .. import schema
-from ..json import make_encodeable
 
 ALLOWED_FIELDS_FROM_UNTRUSTED_CONTAINER = (
     # Prediction output and output metadata

@@ -1,10 +1,7 @@
-from enum import Enum, auto, unique
-from typing import Any, Dict, Optional
-
 from attrs import define
-
-from .. import schema
-from ..server.http import Health
+from cog import schema
+from cog.server.http import Health
+from typing import Any, Dict, Optional
 
 
 @define

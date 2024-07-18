@@ -1,15 +1,16 @@
 import queue
 import threading
-from typing import Callable, Optional
-
 import requests
 import structlog
+
 from attrs import define
+from cog.server.http import Health
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry  # type: ignore
+from typing import Callable, Optional
 
-from .eventtypes import HealthcheckStatus
-from ..server.http import Health
+from .event_types import HealthcheckStatus
+
 
 log = structlog.get_logger(__name__)
 

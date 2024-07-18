@@ -1,13 +1,13 @@
 import os
 import threading
 import time
+import structlog
+
+from cog import schema
 from queue import Empty, Full, Queue
 from typing import Optional
-
-import structlog
 from opentelemetry import trace
 
-from .. import schema
 
 log = structlog.get_logger(__name__)
 

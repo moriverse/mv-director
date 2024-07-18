@@ -1,2 +1,5 @@
 cog
 kombu
+opentelemetry-exporter-otlp>=1.11.1,<2
+opentelemetry-sdk>=1.11.1,<2
+protobuf<=3.20.3
