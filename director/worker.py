@@ -11,9 +11,9 @@ log = structlog.get_logger(__name__)
 CHECK_EXPIRE_INTERVAL: float = 3.0
 HEARTBEAT_INTERVAL: float = 10.0
 
-service_url = os.environ.get("WORKER_SERVICE_URL")
+service_url = os.environ.get("WORKLOAD_URL")
 if not service_url:
-    raise Exception("WORKER_SERVICE_URL not found")
+    raise Exception("WORKLOAD_URL not found")
 
 class Worker:
     
