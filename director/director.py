@@ -11,7 +11,7 @@ from cog.server.webhook import webhook_caller
 from opentelemetry import trace
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry  # type: ignore
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List, Optional, Dict
 
 from .event_types import HealthcheckStatus, Webhook
 from .health_checker import Healthchecker
@@ -196,7 +196,7 @@ class Director:
             message.ack()
             log.info("acked message")
             
-    def _handle_message(self, message: str, span: trace.Span) -> None:
+    def _handle_message(self, message: Dict, span: trace.Span) -> None:
         prediction_id = message["id"]
 
         structlog.contextvars.bind_contextvars(
