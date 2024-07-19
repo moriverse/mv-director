@@ -1,4 +1,3 @@
-import json
 import queue
 import signal
 import time
@@ -8,17 +7,18 @@ import structlog
 from cog import schema
 from cog.server.http import Health
 from cog.server.probes import ProbeHelper
-from cog.server.webhook import requests_session, webhook_caller
+from cog.server.webhook import webhook_caller
 from opentelemetry import trace
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry  # type: ignore
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, List, Optional
 
 from .event_types import HealthcheckStatus, Webhook
 from .health_checker import Healthchecker
 from .monitor import Monitor, span_attributes_from_env
 from .prediction_tracker import PredictionTracker
-from .redis import EmptyRedisStream, RedisConsumerRotator
+from .redis import RedisConsumer
+from .worker import Worker
 
 log = structlog.get_logger(__name__)
 
@@ -52,18 +52,16 @@ class Director:
         events: queue.Queue,
         healthchecker: Healthchecker,
         monitor: Monitor,
-        redis_consumer_rotator: RedisConsumerRotator,
+        worker: Worker,
         predict_timeout: int,
         max_failure_count: int,
-        report_setup_run_url: str,
     ):
         self.events = events
         self.healthchecker = healthchecker
         self.monitor = monitor
-        self.redis_consumer_rotator = redis_consumer_rotator
+        self.worker = worker
         self.predict_timeout = predict_timeout
         self.max_failure_count = max_failure_count
-        self.report_setup_run_url = report_setup_run_url
 
         self._failure_count = 0
         self._should_exit = False
@@ -79,17 +77,18 @@ class Director:
             signal.signal(signal.SIGTERM, self._handle_exit)
 
             # Signal pod readiness (when in k8s)
-            probes = ProbeHelper()
-            probes.ready()
+            ProbeHelper().ready()
 
             # First, we wait for the model container to report a successful
             # setup.
+            self.worker.prepare()
             self._setup()
+            self.worker.idle()
 
-            # Now, we enter the main loop, pulling prediction requests from Redis
+            # Now, we enter the main loop, consume prediction requests from Redis
             # and managing the model container.
             self._loop()
-
+            
         finally:
             log.info("shutting down worker: bye bye!")
 
@@ -105,7 +104,10 @@ class Director:
                     log.error(
                         "caught exception while running shutdown hook", exc_info=True
                     )
-
+                    
+            # Mark as SHUTDOWN.
+            self.worker.shutdown()
+                    
     def register_shutdown_hook(self, hook: Callable) -> None:
         self._shutdown_hooks.append(hook)
 
@@ -113,10 +115,13 @@ class Director:
         log.warn("received termination signal", signal=signal.Signals(signum).name)
         self._should_exit = True
 
+    def _aborted(self):
+        return self._should_exit or self.worker.expired
+
     def _setup(self) -> None:
         mark = time.perf_counter()
 
-        while not self._should_exit:
+        while not self._aborted():
             try:
                 event = self.events.get(timeout=1)
             except queue.Empty:
@@ -140,8 +145,6 @@ class Director:
                 wait_seconds=wait_seconds,
                 health=event.health.name,
             )
-            self._report_setup_run(event.metadata)
-
             # if setup failed, exit immediately
             if event.health == Health.SETUP_FAILED:
                 self._abort("model container failed setup")
@@ -153,48 +156,47 @@ class Director:
             return
 
     def _loop(self) -> None:
-        while not self._should_exit:
-            self.redis_consumer_rotator.rotate()
-            redis_consumer = self.redis_consumer_rotator.get_current()
-
-            structlog.contextvars.clear_contextvars()
-            structlog.contextvars.bind_contextvars(
-                queue=redis_consumer.redis_input_queue,
-            )
-            self.monitor.set_current_prediction(None)
-
+        def _on_pre_handler():
             self._confirm_model_health()
-
-            try:
-                message_json = redis_consumer.get()
-            except EmptyRedisStream:
-                continue
-            except Exception:
-                self._record_failure()
-                log.error("error fetching message from redis", exc_info=True)
-                time.sleep(5)
-                continue
-
-            structlog.contextvars.bind_contextvars(message_id=redis_consumer.message_id)
-
-            try:
-                log.info("received message")
-                with self._tracer.start_as_current_span(
-                    name="cog.prediction",
-                    attributes=span_attributes_from_env(),
-                ) as span:
-                    self._handle_message(message_json, span)
-            except Exception:
-                self._record_failure()
-                log.error("caught exception while running prediction", exc_info=True)
-            finally:
-                # See the comment in RedisConsumer.get to understand why we ack
-                # even when an exception is thrown while handling a message.
-                redis_consumer.ack()
-                log.info("acked message")
-
-    def _handle_message(self, message_json: str, span: trace.Span) -> None:
-        message = json.loads(message_json)
+        
+        queue = self.worker.queue
+        while not self._aborted():
+            structlog.contextvars.clear_contextvars()
+            structlog.contextvars.bind_contextvars(queue=queue)
+            
+            RedisConsumer().consume(
+                queue=queue,
+                on_message=self._handle_message,
+                on_pre_message=_on_pre_handler, 
+                aborted=self._aborted
+            )
+            
+            structlog.contextvars.clear_contextvars()
+            queue = self.worker.next_queue()
+            if not queue: 
+                log.info("No next queue to consume.")
+                break
+            
+    def _on_message(self, body, message):
+        try:
+            log.info("received message")
+            with self._tracer.start_as_current_span(
+                name="cog.prediction",
+                attributes=span_attributes_from_env(),
+            ) as span:
+                self._handle_message(body, span)
+        except Exception:
+            self._record_failure()
+            log.error("caught exception while running prediction", exc_info=True)
+        finally:
+            self.monitor.set_current_prediction(None)
+            
+            # See the comment in RedisConsumer.get to understand why we ack
+            # even when an exception is thrown while handling a message.
+            message.ack()
+            log.info("acked message")
+            
+    def _handle_message(self, message: str, span: trace.Span) -> None:
         prediction_id = message["id"]
 
         structlog.contextvars.bind_contextvars(
@@ -213,10 +215,6 @@ class Director:
         )
         self.monitor.set_current_prediction(tracker._response)
         self._set_span_attributes_from_tracker(span, tracker)
-
-        should_cancel = self.redis_consumer_rotator.get_current().checker(
-            message.get("cancel_key")
-        )
 
         # Override webhook to call us
         message["webhook"] = "http://localhost:4900/webhook"
@@ -280,11 +278,6 @@ class Director:
                         )
                 else:
                     log.warn("received unknown event", data=event)
-
-            if should_cancel():
-                log.info("prediction cancelation requested")
-                self._cancel_prediction(prediction_id, span)
-                break
 
             if self.predict_timeout and tracker.runtime > self.predict_timeout:
                 log.warn(
@@ -396,18 +389,6 @@ class Director:
             timeout=1,
         )
         resp.raise_for_status()
-
-    def _report_setup_run(self, payload: Optional[Dict[str, Any]]) -> None:
-        if not self.report_setup_run_url:
-            return
-
-        session = requests_session()
-        try:
-            # TODO this should be async so we can get on with predictions ASAP
-            resp = session.post(self.report_setup_run_url, json=payload)
-            resp.raise_for_status()
-        except requests.exceptions.RequestException:
-            log.warn("failed to report setup run", exc_info=True)
 
     def _record_failure(
         self,
