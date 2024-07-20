@@ -17,7 +17,7 @@ from .event_types import HealthcheckStatus, Webhook
 from .health_checker import Healthchecker
 from .monitor import Monitor, span_attributes_from_env
 from .prediction_tracker import PredictionTracker
-from .redis import RedisConsumer
+from .mq import RedisConsumer
 from .worker import Worker
 
 log = structlog.get_logger(__name__)
