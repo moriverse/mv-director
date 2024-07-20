@@ -1,8 +1,12 @@
-FROM python:3.12
+FROM python:3.12-slim
 
-WORKDIR /code
+WORKDIR /app
 
-COPY ./requirements.txt /code/requirements.txt
-RUN pip install --no-cache-dir --upgrade -r /code/requirements.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./director /code/director
+COPY . .
+
+# Clean up
+RUN apt-get clean && \
+    rm -rf /var/lib/apt/lists/*

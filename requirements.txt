@@ -3,3 +3,5 @@ kombu[redis]
 opentelemetry-exporter-otlp>=1.11.1,<2
 opentelemetry-sdk>=1.11.1,<2
 protobuf<=3.20.3
+structlog
+uvicorn
