@@ -166,7 +166,7 @@ class Director:
             
             RedisConsumer().consume(
                 queue=queue,
-                on_message=self._handle_message,
+                on_message=self._on_message,
                 on_pre_message=_on_pre_handler, 
                 aborted=self._aborted
             )
@@ -201,7 +201,6 @@ class Director:
 
         structlog.contextvars.bind_contextvars(
             prediction_id=prediction_id,
-            model_version=message["version"],
         )
 
         log.info("running prediction")

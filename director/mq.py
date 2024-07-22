@@ -16,7 +16,7 @@ _addr = f"redis://{REDIS_USER}:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/"
 
 class RedisConsumer:
     
-    def consume(self, queue, on_message, on_pre_message=None, aborted=None, timeout=10):
+    def consume(self, queue, on_message, on_pre_message=None, aborted=None, timeout=30):
         log.info(f"Connecting to redis queue: {queue} with timeout {timeout}")
         
         with Connection(_addr) as conn:
