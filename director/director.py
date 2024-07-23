@@ -208,13 +208,15 @@ class Director:
         # Tracker is tied to a single prediction, and deliberately only exists
         # within this method in an attempt to eliminate the possibility that we
         # mix up state between predictions.
-        webhook = message.get("webhook")
+        caller = None
+        if message.get("webhook") is not None:
+            caller = webhook_caller(
+                url=message["webhook"]["url"], 
+                headers=message["webhook"]["headers"]
+            )
         tracker = PredictionTracker(
             response=schema.PredictionResponse(**message),
-            webhook_caller=webhook_caller(
-                url=webhook["url"], 
-                headers=webhook["headers"]
-            ) if webhook is not None else None,
+            webhook_caller=caller,
         )
         self.monitor.set_current_prediction(tracker._response)
         self._set_span_attributes_from_tracker(span, tracker)

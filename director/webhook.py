@@ -25,7 +25,10 @@ def webhook_caller(url: str, headers: Dict = None) -> Callable[[Any], None]:
     default_session = requests_session()
     retry_session = requests_session_with_retries()
 
-    def caller(response: PredictionResponse) -> None:
+    def caller(response: Dict) -> None:
+        if isinstance(response, Dict):
+            response = PredictionResponse(**response)
+            
         if throttler.should_send_response(response):
             dict_response = jsonable_encoder(response.dict(exclude_unset=True))
             if Status.is_terminal(response.status):
