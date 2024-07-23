@@ -7,7 +7,6 @@ import structlog
 from cog import schema
 from cog.server.http import Health
 from cog.server.probes import ProbeHelper
-from cog.server.webhook import webhook_caller
 from opentelemetry import trace
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry  # type: ignore
@@ -18,6 +17,7 @@ from .health_checker import Healthchecker
 from .monitor import Monitor, span_attributes_from_env
 from .prediction_tracker import PredictionTracker
 from .mq import RedisConsumer
+from .webhook import webhook_caller
 from .worker import Worker
 
 log = structlog.get_logger(__name__)
@@ -208,9 +208,13 @@ class Director:
         # Tracker is tied to a single prediction, and deliberately only exists
         # within this method in an attempt to eliminate the possibility that we
         # mix up state between predictions.
+        webhook = message.get("webhook")
         tracker = PredictionTracker(
             response=schema.PredictionResponse(**message),
-            webhook_caller=webhook_caller(message["webhook"]),
+            webhook_caller=webhook_caller(
+                url=webhook["url"], 
+                headers=webhook["headers"]
+            ) if webhook is not None else None,
         )
         self.monitor.set_current_prediction(tracker._response)
         self._set_span_attributes_from_tracker(span, tracker)
