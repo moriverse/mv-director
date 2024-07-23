@@ -45,6 +45,7 @@ parser = ArgumentParser()
 
 parser.add_argument("--worker-id", type=str)
 parser.add_argument("--queue", type=str, required=True)
+parser.add_argument("--consume-timeout", type=int, default=30)
 parser.add_argument("--predict-timeout", type=int, default=1800)
 parser.add_argument(
     "--max-failure-count",
@@ -78,6 +79,7 @@ director = Director(
     healthchecker=healthchecker,
     monitor=monitor,
     worker=worker,
+    consume_timeout=args.consume_timeout,
     predict_timeout=args.predict_timeout,
     max_failure_count=args.max_failure_count,
 )

@@ -37,7 +37,7 @@ class RedisConsumer:
                     except socket.timeout:
                         pass
                     
-                    is_timeout = time.perf_counter() - mark >= timeout
+                    is_timeout = timeout > 0 and time.perf_counter() - mark >= timeout
                     is_aborted = aborted is not None and aborted()
                     if is_timeout or is_aborted:
                         log.warn(

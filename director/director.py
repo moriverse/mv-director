@@ -53,6 +53,7 @@ class Director:
         healthchecker: Healthchecker,
         monitor: Monitor,
         worker: Worker,
+        consume_timeout: int,
         predict_timeout: int,
         max_failure_count: int,
     ):
@@ -60,6 +61,7 @@ class Director:
         self.healthchecker = healthchecker
         self.monitor = monitor
         self.worker = worker
+        self.consume_timeout = consume_timeout
         self.predict_timeout = predict_timeout
         self.max_failure_count = max_failure_count
 
@@ -160,7 +162,7 @@ class Director:
             self._confirm_model_health()
         
         queue = self.worker.queue
-        while not self._aborted():
+        while True:
             structlog.contextvars.clear_contextvars()
             structlog.contextvars.bind_contextvars(queue=queue)
             
@@ -168,10 +170,14 @@ class Director:
                 queue=queue,
                 on_message=self._on_message,
                 on_pre_message=_on_pre_handler, 
-                aborted=self._aborted
+                aborted=self._aborted,
+                timeout=self.consume_timeout
             )
             
             structlog.contextvars.clear_contextvars()
+
+            if self._aborted(): break
+            
             queue = self.worker.next_queue()
             if not queue: 
                 log.info("No next queue to consume.")
