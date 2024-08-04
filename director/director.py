@@ -156,6 +156,8 @@ class Director:
             self.healthchecker.set_interval(5)
 
             return
+        
+        if self._aborted(): raise
 
     def _loop(self) -> None:
         def _on_pre_handler():
