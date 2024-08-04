@@ -217,8 +217,8 @@ class Director:
         caller = None
         if message.get("webhook") is not None:
             caller = webhook_caller(
-                url=message["webhook"]["url"], 
-                headers=message["webhook"]["headers"]
+                url=message["webhook"].get("url"), 
+                headers=message["webhook"].get("headers")
             )
         tracker = PredictionTracker(
             response=schema.PredictionResponse(**message),
