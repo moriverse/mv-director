@@ -157,7 +157,7 @@ class Director:
 
             return
         
-        if self._aborted(): raise
+        if self._aborted(): raise Exception("Setup aborted.")
 
     def _loop(self) -> None:
         def _on_pre_handler():
