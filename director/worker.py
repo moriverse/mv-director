@@ -1,4 +1,3 @@
-import os
 import structlog
 import time
 import threading
@@ -11,15 +10,12 @@ log = structlog.get_logger(__name__)
 CHECK_EXPIRE_INTERVAL: float = 3.0
 HEARTBEAT_INTERVAL: float = 10.0
 
-service_url = os.environ.get("WORKLOAD_URL")
-if not service_url:
-    raise Exception("WORKLOAD_URL not found")
-
 class Worker:
     
-    def __init__(self, id: str | None, queue: str):
-        self.id = id
+    def __init__(self, queue: str, id: str | None, report_url: str | None):
         self.queue = queue
+        self.id = id
+        self.report_url = report_url
         self.expired = False
         
         self._should_shutdown = False
@@ -76,22 +72,22 @@ class Worker:
         self._report("SHUTDOWN")
     
     def _report(self, status: str):
-        if not self.id: return
+        if not self._can_report(): return
         
         try:
             resp = requests_session().put(
-                f"{service_url}/status/{self.id}?status={status}"
+                f"{self.report_url}/status/{self.id}?status={status}"
             )
             resp.raise_for_status()
         except Exception:
             log.warn("failed to report worker status")
     
     def _check_expired(self) -> bool:
-        if not self.id: return False
+        if not self._can_report(): return
         
         try:
             resp = requests_session().get(
-                f"{service_url}/expired/{self.id}"
+                f"{self.report_url}/expired/{self.id}"
             )
             resp.raise_for_status()
             
@@ -101,22 +97,22 @@ class Worker:
             log.warn("failed to check worker expired")
     
     def _heartbeat(self) -> bool:
-        if not self.id: return False
+        if not self._can_report(): return False
         
         try:
             resp = requests_session().put(
-                f"{service_url}/heartbeat/{self.id}"
+                f"{self.report_url}/heartbeat/{self.id}"
             )
             resp.raise_for_status()
         except Exception:
             log.warn("failed to heartbeat")
     
     def next_queue(self) -> str:
-        if not self.id: return self.queue
+        if not self._can_report(): return self.queue
         
         try:
             resp = requests_session().get(
-                f"{service_url}/next_queue/{self.id}"
+                f"{self.report_url}/next_queue/{self.id}"
             )
             resp.raise_for_status()
             
@@ -126,4 +122,7 @@ class Worker:
             log.warn("failed to get next queue", error=e)
             
             return self.queue
+        
+    def _can_report(self):
+        return not self.id or not self.report_url
     

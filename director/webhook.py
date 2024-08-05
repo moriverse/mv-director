@@ -18,8 +18,6 @@ log = structlog.get_logger(__name__)
 _response_interval = float(os.environ.get("COG_THROTTLE_RESPONSE_INTERVAL", 0.5))
 
 def webhook_caller(url: str, headers: Dict = None) -> Callable[[Any], None]:
-    # TODO: we probably don't need to create new sessions and new throttlers
-    # for every prediction.
     throttler = ResponseThrottler(response_interval=_response_interval)
 
     default_session = requests_session()
@@ -54,10 +52,6 @@ def requests_session() -> requests.Session:
     ctx = current_trace_context() or {}
     for key, value in ctx.items():
         session.headers[key] = str(value)
-
-    auth_token = os.environ.get("WEBHOOK_AUTH_TOKEN")
-    if auth_token:
-        session.headers["authorization"] = "Bearer " + auth_token
 
     return session
 

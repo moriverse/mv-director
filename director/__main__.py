@@ -53,6 +53,8 @@ parser.add_argument(
     default=5,
     help="Maximum number of consecutive failures before the worker should exit",
 )
+parser.add_argument("--redis-url", type=str, required=True)
+parser.add_argument("--report-url", type=str, required=False)
 
 args = parser.parse_args()
 
@@ -71,7 +73,11 @@ healthchecker.start()
 monitor = Monitor()
 monitor.start()
 
-worker = Worker(id=args.worker_id, queue=args.queue)
+worker = Worker(
+    id=args.worker_id, 
+    queue=args.queue, 
+    report_url=args.report_url
+)
 worker.start()
 
 director = Director(
@@ -79,6 +85,7 @@ director = Director(
     healthchecker=healthchecker,
     monitor=monitor,
     worker=worker,
+    redis_url=args.redis_url,
     consume_timeout=args.consume_timeout,
     predict_timeout=args.predict_timeout,
     max_failure_count=args.max_failure_count,

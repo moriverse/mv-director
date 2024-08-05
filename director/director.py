@@ -53,6 +53,7 @@ class Director:
         healthchecker: Healthchecker,
         monitor: Monitor,
         worker: Worker,
+        redis_url: str,
         consume_timeout: int,
         predict_timeout: int,
         max_failure_count: int,
@@ -61,6 +62,7 @@ class Director:
         self.healthchecker = healthchecker
         self.monitor = monitor
         self.worker = worker
+        self.redis_url = redis_url
         self.consume_timeout = consume_timeout
         self.predict_timeout = predict_timeout
         self.max_failure_count = max_failure_count
@@ -170,6 +172,7 @@ class Director:
             
             RedisConsumer().consume(
                 queue=queue,
+                redis_url=self.redis_url,
                 on_message=self._on_message,
                 on_pre_message=_on_pre_handler, 
                 aborted=self._aborted,
