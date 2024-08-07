@@ -53,11 +53,11 @@ def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
                 if not object_key:
                     # Compute the md5 hash from image_data as object key.
                     object_key = hashlib.md5(image_data).hexdigest()
-
+                    
                     # Add extension if possible.
                     ext = mimetypes.guess_extension(content_type)
                     if ext:
-                        object_key = f"{hash}{ext}"
+                        object_key = f"{object_key}{ext}"
 
                     # Add prefix if needed.
                     if params.path_prefix:
