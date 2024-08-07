@@ -111,9 +111,9 @@ class PredictionTracker:
 
             # Upload output to S3 if needed.
             if self._upload_caller:
-                url = self._upload_caller(self._response.output)
-                if url is not None:
-                    self._response.output = url
+                uploaded = self._upload_caller(self._response.output)
+                if uploaded:
+                    self._response.output = uploaded
 
     def _send_webhook(self) -> None:
         if not self._webhook_caller:
