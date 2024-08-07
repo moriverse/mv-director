@@ -12,6 +12,8 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry  # type: ignore
 from typing import Any, Callable, List, Optional, Dict
 
+from director.s3 import UploadParams, upload_caller
+
 from .event_types import HealthcheckStatus, Webhook
 from .health_checker import Healthchecker
 from .monitor import Monitor, span_attributes_from_env
@@ -228,9 +230,20 @@ class Director:
                 headers=message["webhook"].get("headers"),
             )
 
+        _upload_caller = None
+        if message.get("upload") is not None:
+            _upload_params = message.get("upload")
+            try:
+                params = UploadParams(**_upload_params)
+                _upload_caller = upload_caller(params)
+
+            except Exception as e:
+                log.error(f"Cannot parse upload params. {_upload_params}")
+
         tracker = PredictionTracker(
             response=schema.PredictionResponse(**message),
             webhook_caller=_webhook_caller,
+            upload_caller=_upload_caller,
         )
         self.monitor.set_current_prediction(tracker._response)
         self._set_span_attributes_from_tracker(span, tracker)
