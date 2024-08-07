@@ -70,7 +70,7 @@ def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
                     ContentType=content_type,
                 )
 
-                return f"{params.url}/{params.bucket}/{object_key}"
+                return f"{params.url_prefix}/{object_key}"
 
             except Exception:
                 log.error(f"Cannot upload file to {params.url}", exc_info=True)
