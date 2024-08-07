@@ -62,7 +62,7 @@ def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
                 return f"{params.url}/{params.bucket}/{object_key}"
 
             except Exception as e:
-                log.error(f"Cannot upload file to {params.url}, error: {e}")
+                log.error(f"Cannot upload file to {params.url}", exc_info=True)
                 return None
 
         url_list = []
