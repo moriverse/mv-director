@@ -1,6 +1,7 @@
 import base64
 import boto3
 import hashlib
+import mimetypes
 import structlog
 
 from botocore.config import Config
@@ -17,6 +18,7 @@ class UploadParams(BaseModel):
     secret_key: str
     url_prefix: str
     path_prefix: Optional[str] = None
+    object_key: Optional[str] = None
 
 
 def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
@@ -35,42 +37,42 @@ def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
         config=retry_config,
     )
 
-    def caller(response: List[str]) -> Optional[str]:
-        def upload(base64_url: str):
-            try:
-                # Extract the content type from the base64 URL
-                content_type = base64_url.split(";")[0].split(":")[1]
+    def caller(base64_url: str) -> Optional[str]:
+        try:
+            # Extract the content type from the base64 URL
+            content_type = base64_url.split(";")[0].split(":")[1]
 
-                # Strip the prefix to get the base64-encoded string
-                base64_image = base64_url.split(",")[1]
+            # Strip the prefix to get the base64-encoded string
+            base64_image = base64_url.split(",")[1]
 
-                # Decode the base64 string to bytes
-                image_data = base64.b64decode(base64_image)
+            # Decode the base64 string to bytes
+            image_data = base64.b64decode(base64_image)
 
+            object_key = params.object_key
+            if not object_key:
                 # Compute the md5 hash from image_data as object key.
                 object_key = hashlib.md5(image_data).hexdigest()
-                if params.path_prefix is not None:
+
+                # Add extension if possible.
+                ext = mimetypes.guess_extension(content_type)
+                if ext:
+                    object_key = f"{hash}{ext}"
+
+                # Add prefix if needed.
+                if params.path_prefix:
                     object_key = f"{params.path_prefix}/{object_key}"
 
-                s3_client.put_object(
-                    Bucket=params.bucket,
-                    Key=object_key,
-                    Body=image_data,
-                    ContentType=content_type,
-                )
+            s3_client.put_object(
+                Bucket=params.bucket,
+                Key=object_key,
+                Body=image_data,
+                ContentType=content_type,
+            )
 
-                return f"{params.url}/{params.bucket}/{object_key}"
+            return f"{params.url}/{params.bucket}/{object_key}"
 
-            except Exception as e:
-                log.error(f"Cannot upload file to {params.url}", exc_info=True)
-                return None
-
-        url_list = []
-        for url in response:
-            uploaded = upload(url)
-            if uploaded:
-                url_list.append(uploaded)
-
-        return url_list
+        except Exception:
+            log.error(f"Cannot upload file to {params.url}", exc_info=True)
+            return None
 
     return caller
