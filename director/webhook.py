@@ -1,5 +1,5 @@
 import os
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import requests
 import structlog
@@ -17,6 +17,7 @@ log = structlog.get_logger(__name__)
 
 _response_interval = float(os.environ.get("COG_THROTTLE_RESPONSE_INTERVAL", 0.5))
 
+
 def webhook_caller(url: str, headers: Dict = None) -> Callable[[Any], None]:
     throttler = ResponseThrottler(response_interval=_response_interval)
 
@@ -26,7 +27,7 @@ def webhook_caller(url: str, headers: Dict = None) -> Callable[[Any], None]:
     def caller(response: Dict) -> None:
         if isinstance(response, Dict):
             response = PredictionResponse(**response)
-            
+
         if throttler.should_send_response(response):
             dict_response = jsonable_encoder(response.dict(exclude_unset=True))
             if Status.is_terminal(response.status):
@@ -43,11 +44,14 @@ def webhook_caller(url: str, headers: Dict = None) -> Callable[[Any], None]:
     return caller
 
 
-def requests_session() -> requests.Session:
+def requests_session(auth_key: Optional[str] = None) -> requests.Session:
     session = requests.Session()
     session.headers["user-agent"] = (
         get_user_agent() + " " + str(session.headers["user-agent"])
     )
+
+    if auth_key:
+        session.headers["Authorization"] = f"Bearer {auth_key}"
 
     ctx = current_trace_context() or {}
     for key, value in ctx.items():
@@ -56,11 +60,13 @@ def requests_session() -> requests.Session:
     return session
 
 
-def requests_session_with_retries() -> requests.Session:
+def requests_session_with_retries(
+    auth_key: Optional[str] = None,
+) -> requests.Session:
     # This session will retry requests up to 12 times, with exponential
     # backoff. In total it'll try for up to roughly 320 seconds, providing
     # resilience through temporary networking and availability issues.
-    session = requests_session()
+    session = requests_session(auth_key)
     adapter = HTTPAdapter(
         max_retries=Retry(
             total=12,

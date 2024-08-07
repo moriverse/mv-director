@@ -55,6 +55,7 @@ parser.add_argument(
 )
 parser.add_argument("--redis-url", type=str, required=True)
 parser.add_argument("--report-url", type=str, required=False)
+parser.add_argument("--report-key", type=str, required=False)
 
 args = parser.parse_args()
 
@@ -65,8 +66,8 @@ server = Server(config)
 server.start()
 
 healthchecker = Healthchecker(
-    events=events, 
-    fetcher=http_fetcher("http://localhost:5000/health-check")
+    events=events,
+    fetcher=http_fetcher("http://localhost:5000/health-check"),
 )
 healthchecker.start()
 
@@ -74,9 +75,10 @@ monitor = Monitor()
 monitor.start()
 
 worker = Worker(
-    id=args.worker_id, 
-    queue=args.queue, 
-    report_url=args.report_url
+    id=args.worker_id,
+    queue=args.queue,
+    report_url=args.report_url,
+    report_key=args.report_key,
 )
 worker.start()
 
