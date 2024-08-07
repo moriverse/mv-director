@@ -92,7 +92,7 @@ class Director:
             # Now, we enter the main loop, consume prediction requests from Redis
             # and managing the model container.
             self._loop()
-            
+
         finally:
             log.info("shutting down worker: bye bye!")
 
@@ -108,10 +108,10 @@ class Director:
                     log.error(
                         "caught exception while running shutdown hook", exc_info=True
                     )
-                    
+
             # Mark as SHUTDOWN.
             self.worker.shutdown()
-                    
+
     def register_shutdown_hook(self, hook: Callable) -> None:
         self._shutdown_hooks.append(hook)
 
@@ -158,36 +158,38 @@ class Director:
             self.healthchecker.set_interval(5)
 
             return
-        
-        if self._aborted(): raise Exception("Setup aborted.")
+
+        if self._aborted():
+            raise Exception("Setup aborted.")
 
     def _loop(self) -> None:
         def _on_pre_handler():
             self._confirm_model_health()
-        
+
         queue = self.worker.queue
         while True:
             structlog.contextvars.clear_contextvars()
             structlog.contextvars.bind_contextvars(queue=queue)
-            
+
             RedisConsumer().consume(
                 queue=queue,
                 redis_url=self.redis_url,
                 on_message=self._on_message,
-                on_pre_message=_on_pre_handler, 
+                on_pre_message=_on_pre_handler,
                 aborted=self._aborted,
-                timeout=self.consume_timeout
+                timeout=self.consume_timeout,
             )
-            
+
             structlog.contextvars.clear_contextvars()
 
-            if self._aborted(): break
-            
+            if self._aborted():
+                break
+
             queue = self.worker.next_queue()
-            if not queue: 
+            if not queue:
                 log.info("No next queue to consume.")
                 break
-            
+
     def _on_message(self, body, message):
         try:
             log.info("received message")
@@ -201,12 +203,12 @@ class Director:
             log.error("caught exception while running prediction", exc_info=True)
         finally:
             self.monitor.set_current_prediction(None)
-            
+
             # See the comment in RedisConsumer.get to understand why we ack
             # even when an exception is thrown while handling a message.
             message.ack()
             log.info("acked message")
-            
+
     def _handle_message(self, message: Dict, span: trace.Span) -> None:
         prediction_id = message["id"]
 
@@ -219,15 +221,16 @@ class Director:
         # Tracker is tied to a single prediction, and deliberately only exists
         # within this method in an attempt to eliminate the possibility that we
         # mix up state between predictions.
-        caller = None
+        _webhook_caller = None
         if message.get("webhook") is not None:
-            caller = webhook_caller(
-                url=message["webhook"].get("url"), 
-                headers=message["webhook"].get("headers")
+            _webhook_caller = webhook_caller(
+                url=message["webhook"].get("url"),
+                headers=message["webhook"].get("headers"),
             )
+
         tracker = PredictionTracker(
             response=schema.PredictionResponse(**message),
-            webhook_caller=caller,
+            webhook_caller=_webhook_caller,
         )
         self.monitor.set_current_prediction(tracker._response)
         self._set_span_attributes_from_tracker(span, tracker)

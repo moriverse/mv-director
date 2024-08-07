@@ -1,7 +1,11 @@
+import structlog
+
 from cog import schema
 from cog.json import make_encodeable
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
+
+log = structlog.get_logger(__name__)
 
 
 ALLOWED_FIELDS_FROM_UNTRUSTED_CONTAINER = (
@@ -22,8 +26,10 @@ class PredictionTracker:
         self,
         response: schema.PredictionResponse,
         webhook_caller: Optional[Callable] = None,
+        upload_caller: Optional[Callable] = None,
     ):
         self._webhook_caller = webhook_caller
+        self._upload_caller = upload_caller
         self._response = response
         self._timed_out = False
 
@@ -74,7 +80,7 @@ class PredictionTracker:
     def _update(self, mapping: Dict[str, Any]) -> None:
         self._response = self._response.copy(update=mapping)
         self._adjust_cancelation_status()
-        self._set_completed_at()
+        self._set_completion()
         self._send_webhook()
 
     def _adjust_cancelation_status(self) -> None:
@@ -85,7 +91,7 @@ class PredictionTracker:
         self._response.status = schema.Status.FAILED
         self._response.error = "Prediction timed out"
 
-    def _set_completed_at(self) -> None:
+    def _set_completion(self) -> None:
         if not self._response.started_at:
             return
         if self._response.completed_at:
@@ -94,12 +100,23 @@ class PredictionTracker:
         if schema.Status.is_terminal(self._response.status):
             self._response.completed_at = datetime.now(tz=timezone.utc)
 
-            if self._response.status == schema.Status.SUCCEEDED:
-                self._response.metrics = {
-                    "predict_time": (
-                        self._response.completed_at - self._response.started_at
-                    ).total_seconds()
-                }
+            if self._response.status != schema.Status.SUCCEEDED:
+                return
+
+            self._response.metrics = {
+                "predict_time": (
+                    self._response.completed_at - self._response.started_at
+                ).total_seconds()
+            }
+
+            # Upload output to S3 if needed.
+            if self._upload_caller:
+                try:
+                    url = self._upload_caller(self._response.output)
+                    self._response.output = url
+
+                except Exception as e:
+                    log.error(f"Cannot upload with error: {e}")
 
     def _send_webhook(self) -> None:
         if not self._webhook_caller:
