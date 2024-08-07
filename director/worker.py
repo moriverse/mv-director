@@ -70,16 +70,16 @@ class Worker:
         log.info("Worker is down")
 
     def prepare(self):
-        self._report("PREPARE")
+        self._report("prepare")
 
     def idle(self):
-        self._report("IDLE")
+        self._report("idle")
 
     def busy(self):
-        self._report("BUSY")
+        self._report("busy")
 
     def shutdown(self):
-        self._report("SHUTDOWN")
+        self._report("shutdown")
 
     def _report(self, status: str):
         print(self._can_report())
@@ -133,4 +133,4 @@ class Worker:
             return self.queue
 
     def _can_report(self):
-        return not self.id or not self.report_url
+        return self.id and self.report_url
