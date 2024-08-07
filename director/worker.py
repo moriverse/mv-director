@@ -23,7 +23,7 @@ class Worker:
     ):
         self.queue = queue
         self.id = id
-        self.report_url = report_url
+        self.report_url = f"{report_url}/worker"
         self.expired = False
 
         self._should_shutdown = False
@@ -82,7 +82,6 @@ class Worker:
         self._report("shutdown")
 
     def _report(self, status: str):
-        print(self._can_report())
         if not self._can_report():
             return
 
@@ -102,7 +101,7 @@ class Worker:
             resp = self._session.get(f"{self.report_url}/expired/{self.id}")
             resp.raise_for_status()
 
-            self.expired = resp.json().get("expired", False)
+            self.expired = resp.json()
 
         except Exception:
             log.warn("failed to check worker expired")
