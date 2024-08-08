@@ -103,7 +103,7 @@ class PredictionTracker:
                 return
 
             # Upload output to S3 if needed.
-            if self._upload_caller:
+            if self._response.output and self._upload_caller:
                 uploaded = self._upload_caller(self._response.output)
                 if uploaded:
                     self._response.output = uploaded

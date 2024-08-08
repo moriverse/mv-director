@@ -37,42 +37,46 @@ def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
         config=retry_config,
     )
 
-    def caller(base64_url: str) -> Optional[str]:
-        try:
-            # Extract the content type from the base64 URL
-            content_type = base64_url.split(";")[0].split(":")[1]
+    def caller(response: List[str]) -> Optional[str]:
+        def upload(base64_url: str):
+            try:
+                # Extract the content type from the base64 URL
+                content_type = base64_url.split(";")[0].split(":")[1]
 
-            # Strip the prefix to get the base64-encoded string
-            base64_image = base64_url.split(",")[1]
+                # Strip the prefix to get the base64-encoded string
+                base64_image = base64_url.split(",")[1]
 
-            # Decode the base64 string to bytes
-            image_data = base64.b64decode(base64_image)
+                # Decode the base64 string to bytes
+                image_data = base64.b64decode(base64_image)
 
-            object_key = params.object_key
-            if not object_key:
-                # Compute the md5 hash from image_data as object key.
-                object_key = hashlib.md5(image_data).hexdigest()
+                object_key = params.object_key
+                if not object_key:
+                    # Compute the md5 hash from image_data as object key.
+                    object_key = hashlib.md5(image_data).hexdigest()
+                    
+                    # Add extension if possible.
+                    ext = mimetypes.guess_extension(content_type)
+                    if ext:
+                        object_key = f"{object_key}{ext}"
 
-                # Add extension if possible.
-                ext = mimetypes.guess_extension(content_type)
-                if ext:
-                    object_key = f"{hash}{ext}"
+                    # Add prefix if needed.
+                    if params.path_prefix:
+                        object_key = f"{params.path_prefix}/{object_key}"
 
-                # Add prefix if needed.
-                if params.path_prefix:
-                    object_key = f"{params.path_prefix}/{object_key}"
+                s3_client.put_object(
+                    Bucket=params.bucket,
+                    Key=object_key,
+                    Body=image_data,
+                    ContentType=content_type,
+                )
 
-            s3_client.put_object(
-                Bucket=params.bucket,
-                Key=object_key,
-                Body=image_data,
-                ContentType=content_type,
-            )
+                return f"{params.url_prefix}/{object_key}"
 
-            return f"{params.url}/{params.bucket}/{object_key}"
+            except Exception:
+                log.error(f"Cannot upload file to {params.url}", exc_info=True)
+                return base64_url
 
-        except Exception:
-            log.error(f"Cannot upload file to {params.url}", exc_info=True)
-            return None
+        return [upload(url) for url in response]
+
 
     return caller
