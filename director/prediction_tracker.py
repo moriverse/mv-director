@@ -92,22 +92,15 @@ class PredictionTracker:
         self._response.error = "Prediction timed out"
 
     def _set_completion(self) -> None:
-        if not self._response.started_at:
-            return
         if self._response.completed_at:
             return
 
         if schema.Status.is_terminal(self._response.status):
             self._response.completed_at = datetime.now(tz=timezone.utc)
+            self._response.metrics = {"exec_time": self.runtime}
 
             if self._response.status != schema.Status.SUCCEEDED:
                 return
-
-            self._response.metrics = {
-                "predict_time": (
-                    self._response.completed_at - self._response.started_at
-                ).total_seconds()
-            }
 
             # Upload output to S3 if needed.
             if self._upload_caller:
