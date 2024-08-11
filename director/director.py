@@ -195,6 +195,8 @@ class Director:
     def _on_message(self, body, message):
         try:
             log.info("received message")
+            self.worker.busy()
+
             with self._tracer.start_as_current_span(
                 name="cog.prediction",
                 attributes=span_attributes_from_env(),
@@ -206,9 +208,9 @@ class Director:
         finally:
             self.monitor.set_current_prediction(None)
 
-            # See the comment in RedisConsumer.get to understand why we ack
-            # even when an exception is thrown while handling a message.
             message.ack()
+
+            self.worker.idle()
             log.info("acked message")
 
     def _handle_message(self, message: Dict, span: trace.Span) -> None:
