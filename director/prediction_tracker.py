@@ -101,12 +101,18 @@ class PredictionTracker:
 
             if self._response.status != schema.Status.SUCCEEDED:
                 return
+            
+            if not self._response.output:
+                self._response.status = schema.Status.FAILED
+                return
 
-            # Upload output to S3 if needed.
-            if self._response.output and self._upload_caller:
-                uploaded = self._upload_caller(self._response.output)
-                if uploaded:
-                    self._response.output = uploaded
+            if not self._upload_caller:
+                return
+            
+            # Upload output to S3.
+            uploaded = self._upload_caller(self._response.output)
+            if uploaded:
+                self._response.output = uploaded
 
     def _send_webhook(self) -> None:
         if not self._webhook_caller:
