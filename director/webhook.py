@@ -15,7 +15,7 @@ from cog.server.useragent import get_user_agent
 
 log = structlog.get_logger(__name__)
 
-_response_interval = float(os.environ.get("COG_THROTTLE_RESPONSE_INTERVAL", 0.5))
+_response_interval = float(os.environ.get("COG_THROTTLE_RESPONSE_INTERVAL", 0.3))
 
 
 def webhook_caller(url: str, headers: Dict = None) -> Callable[[Any], None]:
@@ -30,16 +30,23 @@ def webhook_caller(url: str, headers: Dict = None) -> Callable[[Any], None]:
 
         if throttler.should_send_response(response):
             dict_response = jsonable_encoder(response.dict(exclude_unset=True))
-            if Status.is_terminal(response.status):
-                # For terminal updates, retry persistently
-                retry_session.post(url, json=dict_response, headers=headers)
-            else:
-                # For other requests, don't retry, and ignore any errors
-                try:
-                    default_session.post(url, json=dict_response, headers=headers)
-                except requests.exceptions.RequestException:
-                    log.warn("caught exception while sending webhook", exc_info=True)
+
+            try:
+                session = (
+                    retry_session
+                    if Status.is_terminal(response.status)
+                    else default_session
+                )
+                resp = session.post(url, json=dict_response, headers=headers)
+                resp.raise_for_status()
+
+            except:
+                log.warn("Caught exception while sending webhook", exc_info=True)
+
             throttler.update_last_sent_response_time()
+
+        else:
+            log.warn(f"Response being throttled. {response}")
 
     return caller
 
