@@ -110,9 +110,9 @@ class PredictionTracker:
                 return
             
             # Upload output to S3.
-            uploaded = self._upload_caller(self._response.output)
-            if uploaded:
-                self._response.output = uploaded
+            # Note that if upload failed, base64 url will be used.
+            self._response.output, upload_time = self._upload_caller(self._response.output)
+            self._response.metrics["upload_time"] = upload_time
 
     def _send_webhook(self) -> None:
         if not self._webhook_caller:

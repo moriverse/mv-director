@@ -38,7 +38,7 @@ def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
         config=retry_config,
     )
 
-    def caller(response: List[str]) -> Optional[List[str]]:
+    def caller(response: List[str]) -> tuple[Optional[List[str]], float]:
         def upload(base64_url: str):
             try:
                 # Extract the content type from the base64 URL
@@ -77,18 +77,18 @@ def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
                 log.error(f"Cannot upload file to {params.url}", exc_info=True)
                 return base64_url
 
+        log.info("Uploading results.")
+
         urls = []
+        start_time = time.time()
         for base64_url in response:
-            start_time = time.time()
-
             url = upload(base64_url)
-
-            elapsed_time = time.time() - start_time
-
-            log.info(f"Result uploaded to {url} in {elapsed_time} seconds")
             urls.append(url)
+        
+        elapsed_time = time.time() - start_time
+        log.info(f"Results uploaded in {elapsed_time} seconds")
 
-        return urls
+        return urls, elapsed_time
 
 
     return caller
