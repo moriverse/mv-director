@@ -78,7 +78,7 @@ def requests_session_with_retries(
         max_retries=Retry(
             total=12,
             backoff_factor=0.1,
-            status_forcelist=[429, 500, 502, 503, 504],
+            status_forcelist=[i for i in range(400, 600)],
             allowed_methods=["POST"],
         )
     )
