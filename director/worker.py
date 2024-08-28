@@ -8,7 +8,7 @@ from .webhook import requests_session
 
 log = structlog.get_logger(__name__)
 
-CHECK_EXPIRE_INTERVAL: float = 3.0
+CHECK_EXPIRE_INTERVAL: float = 10.0
 HEARTBEAT_INTERVAL: float = 10.0
 
 
@@ -24,10 +24,12 @@ class Worker:
         self.queue = queue
         self.id = id
         self.report_url = f"{report_url}/worker"
+
+        self.switched = False
         self.expired = False
 
         self._should_shutdown = False
-        self._check_expired_thread: Optional[threading.Thread] = None
+        self._check_next_queue: Optional[threading.Thread] = None
         self._heartbeat_thread: Optional[threading.Thread] = None
 
         self._session = requests_session(report_key)
@@ -36,8 +38,8 @@ class Worker:
         """
         Start the background worker thread.
         """
-        self._check_expired_thread = threading.Thread(target=self._run_check_expired)
-        self._check_expired_thread.start()
+        self._check_next_queue = threading.Thread(target=self._run_next_queue)
+        self._check_next_queue.start()
 
         self._heartbeat_thread = threading.Thread(target=self._run_heartbeat)
         self._heartbeat_thread.start()
@@ -48,9 +50,9 @@ class Worker:
         """
         self._should_shutdown = True
 
-    def _run_check_expired(self):
+    def _run_next_queue(self):
         while not self._should_shutdown:
-            self._check_expired()
+            self.next_queue()
 
             time.sleep(CHECK_EXPIRE_INTERVAL)
 
@@ -61,8 +63,8 @@ class Worker:
             time.sleep(HEARTBEAT_INTERVAL)
 
     def join(self) -> None:
-        if self._check_expired_thread is not None:
-            self._check_expired_thread.join()
+        if self._check_next_queue is not None:
+            self._check_next_queue.join()
 
         if self._heartbeat_thread is not None:
             self._heartbeat_thread.join()
@@ -93,19 +95,6 @@ class Worker:
         except Exception:
             log.warn("failed to report worker status")
 
-    def _check_expired(self) -> bool:
-        if not self._can_report():
-            return
-
-        try:
-            resp = self._session.get(f"{self.report_url}/expired/{self.id}")
-            resp.raise_for_status()
-
-            self.expired = resp.json()
-
-        except Exception:
-            log.warn("failed to check worker expired")
-
     def _heartbeat(self) -> bool:
         if not self._can_report():
             return False
@@ -124,7 +113,16 @@ class Worker:
             resp = self._session.get(f"{self.report_url}/next_queue/{self.id}")
             resp.raise_for_status()
 
-            return resp.json().get("queue")
+            queue = resp.json().get("queue")
+
+            self.expired = queue is None
+
+            if queue != self.queue:
+                # Update worker queue.
+                self.switched = queue != self.queue
+                self.queue = queue
+
+            return queue
 
         except Exception as e:
             log.warn("failed to get next queue", error=e)

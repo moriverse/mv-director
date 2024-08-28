@@ -165,6 +165,12 @@ class Director:
             raise Exception("Setup aborted.")
 
     def _loop(self) -> None:
+        def _switched():
+            return self.worker.switched
+
+        def _on_start_consume():
+            self.worker.switched = False
+
         def _on_pre_handler():
             self._confirm_model_health()
 
@@ -179,6 +185,8 @@ class Director:
                 on_message=self._on_message,
                 on_pre_message=_on_pre_handler,
                 aborted=self._aborted,
+                switched=_switched,
+                on_start_consume=_on_start_consume,
                 timeout=self.consume_timeout,
             )
 
