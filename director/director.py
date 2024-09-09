@@ -103,6 +103,10 @@ class Director:
             except Exception:
                 log.error("caught exception while shutting down model", exc_info=True)
 
+            # Mark as SHUTDOWN.
+            self.worker.shutdown()
+
+            # Trigger shutdown hooks.
             for hook in self._shutdown_hooks:
                 try:
                     hook()
@@ -110,9 +114,6 @@ class Director:
                     log.error(
                         "caught exception while running shutdown hook", exc_info=True
                     )
-
-            # Mark as SHUTDOWN.
-            self.worker.shutdown()
 
     def register_shutdown_hook(self, hook: Callable) -> None:
         self._shutdown_hooks.append(hook)
@@ -174,13 +175,12 @@ class Director:
         def _on_pre_handler():
             self._confirm_model_health()
 
-        queue = self.worker.queue
         while True:
             structlog.contextvars.clear_contextvars()
-            structlog.contextvars.bind_contextvars(queue=queue)
+            structlog.contextvars.bind_contextvars(queue=self.worker.queue)
 
             RedisConsumer().consume(
-                queue=queue,
+                queue=self.worker.queue,
                 redis_url=self.redis_url,
                 on_message=self._on_message,
                 on_pre_message=_on_pre_handler,
@@ -195,8 +195,7 @@ class Director:
             if self._aborted():
                 break
 
-            queue = self.worker.next_queue()
-            if not queue:
+            if not self.worker.queue:
                 log.info("No next queue to consume.")
                 break
 

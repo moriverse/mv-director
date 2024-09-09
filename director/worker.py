@@ -2,14 +2,24 @@ import structlog
 import time
 import threading
 
+from pydantic import BaseModel
+from queue import Empty, Full, Queue
 from typing import Optional
 
 from .webhook import requests_session
 
 log = structlog.get_logger(__name__)
 
-CHECK_EXPIRE_INTERVAL: float = 10.0
-HEARTBEAT_INTERVAL: float = 10.0
+NEXT_QUEUE_INTERVAL: float = 30.0
+EVENT_INTERNAL: float = 0.01
+
+
+class ReportEvent(BaseModel):
+    status: str
+
+
+class NextQueueEvent(BaseModel):
+    pass
 
 
 class Worker:
@@ -28,62 +38,72 @@ class Worker:
         self.switched = False
         self.expired = False
 
-        self._should_shutdown = False
-        self._check_next_queue: Optional[threading.Thread] = None
-        self._heartbeat_thread: Optional[threading.Thread] = None
+        self._event_thread: Optional[threading.Thread] = None
+        self._next_queue_thread: Optional[threading.Thread] = None
+
+        self._should_exit = threading.Event()
+        self._events = Queue()
 
         self._session = requests_session(report_key)
 
-    def start(self):
-        """
-        Start the background worker thread.
-        """
-        self._check_next_queue = threading.Thread(target=self._run_next_queue)
-        self._check_next_queue.start()
+    def start(self) -> None:
+        self._event_thread = threading.Thread(target=self._run)
+        self._event_thread.start()
 
-        self._heartbeat_thread = threading.Thread(target=self._run_heartbeat)
-        self._heartbeat_thread.start()
+        self._next_queue_thread = threading.Thread(target=self._run_next_queue)
+        self._next_queue_thread.start()
 
-    def stop(self):
-        """
-        Trigger the termination of the worker thread.
-        """
-        self._should_shutdown = True
-
-    def _run_next_queue(self):
-        while not self._should_shutdown:
-            self.next_queue()
-
-            time.sleep(CHECK_EXPIRE_INTERVAL)
-
-    def _run_heartbeat(self):
-        while not self._should_shutdown:
-            self._heartbeat()
-
-            time.sleep(HEARTBEAT_INTERVAL)
+    def stop(self) -> None:
+        self._should_exit.set()
 
     def join(self) -> None:
-        if self._check_next_queue is not None:
-            self._check_next_queue.join()
+        if self._next_queue_thread is not None:
+            self._next_queue_thread.join()
 
-        if self._heartbeat_thread is not None:
-            self._heartbeat_thread.join()
+        if self._event_thread is not None:
+            self._event_thread.join()
 
         log.info("Worker is down")
 
+    def _run(self):
+        while not self._should_exit.is_set() or not self._events.empty():
+            try:
+                event = self._events.get_nowait()
+
+                if isinstance(event, NextQueueEvent):
+                    self.next_queue()
+
+                elif isinstance(event, ReportEvent):
+                    self.report(event.status)
+
+            except Empty:
+                pass
+
+            time.sleep(EVENT_INTERNAL)
+
+    def _run_next_queue(self):
+        while not self._should_exit.is_set():
+            try:
+                self._events.put_nowait(NextQueueEvent())
+
+            except Full:
+                log.info("Event queue is full, dropping next queue event")
+
+            time.sleep(NEXT_QUEUE_INTERVAL)
+
     def prepare(self):
-        self._report("prepare")
+        self._events.put_nowait(ReportEvent(status="prepare"))
 
     def idle(self):
-        self._report("idle")
+        self._events.put_nowait(ReportEvent(status="idle"))
 
     def busy(self):
-        self._report("busy")
+        self._events.put_nowait(ReportEvent(status="busy"))
 
     def shutdown(self):
-        self._report("shutdown")
+        self._events.put_nowait(ReportEvent(status="shutdown"))
 
-    def _report(self, status: str):
+    def report(self, status: str):
         if not self._can_report():
             return
 
@@ -95,19 +115,9 @@ class Worker:
         except Exception:
             log.warn("failed to report worker status")
 
-    def _heartbeat(self) -> bool:
+    def next_queue(self):
         if not self._can_report():
-            return False
-
-        try:
-            resp = self._session.put(f"{self.report_url}/heartbeat/{self.id}")
-            resp.raise_for_status()
-        except Exception:
-            log.warn("failed to heartbeat")
-
-    def next_queue(self) -> str:
-        if not self._can_report():
-            return self.queue
+            return
 
         try:
             resp = self._session.get(f"{self.report_url}/next_queue/{self.id}")
@@ -116,18 +126,13 @@ class Worker:
             queue = resp.json().get("queue")
 
             self.expired = queue is None
-
             if queue != self.queue:
                 # Update worker queue.
                 self.switched = queue != self.queue
                 self.queue = queue
 
-            return queue
-
         except Exception as e:
             log.warn("failed to get next queue", error=e)
-
-            return self.queue
 
     def _can_report(self):
         return self.id and self.report_url
