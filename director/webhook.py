@@ -18,7 +18,12 @@ log = structlog.get_logger(__name__)
 _response_interval = float(os.environ.get("COG_THROTTLE_RESPONSE_INTERVAL", 0.3))
 
 
-def webhook_caller(url: str, headers: Dict = None) -> Callable[[Any], None]:
+def webhook_caller(
+    url: str,
+    headers: Dict = None,
+    upload_caller: Optional[Callable] = None,
+) -> Callable[[Any], None]:
+
     throttler = ResponseThrottler(response_interval=_response_interval)
 
     default_session = requests_session()
@@ -29,15 +34,24 @@ def webhook_caller(url: str, headers: Dict = None) -> Callable[[Any], None]:
             response = PredictionResponse(**response)
 
         if throttler.should_send_response(response):
-            dict_response = jsonable_encoder(response.dict(exclude_unset=True))
-
             try:
+                # Upload results to S3 when task completes.
+                if upload_caller and response.status == Status.SUCCEEDED:
+                    # Note that if upload failed, base64 url will be used.
+                    response.output, upload_time = upload_caller(response.output)
+                    response.metrics["upload_time"] = upload_time
+
+                # Send response to webhook.
                 session = (
                     retry_session
                     if Status.is_terminal(response.status)
                     else default_session
                 )
-                resp = session.post(url, json=dict_response, headers=headers)
+                resp = session.post(
+                    url,
+                    json=jsonable_encoder(response.dict(exclude_unset=True)),
+                    headers=headers,
+                )
                 resp.raise_for_status()
 
             except:

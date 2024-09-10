@@ -26,10 +26,8 @@ class PredictionTracker:
         self,
         response: schema.PredictionResponse,
         webhook_caller: Optional[Callable] = None,
-        upload_caller: Optional[Callable] = None,
     ):
         self._webhook_caller = webhook_caller
-        self._upload_caller = upload_caller
         self._response = response
         self._timed_out = False
 
@@ -99,20 +97,11 @@ class PredictionTracker:
             self._response.completed_at = datetime.now(tz=timezone.utc)
             self._response.metrics = {"exec_time": self.runtime}
 
-            if self._response.status != schema.Status.SUCCEEDED:
-                return
-            
-            if not self._response.output:
+            if (
+                self._response.status == schema.Status.SUCCEEDED
+                and not self._response.output
+            ):
                 self._response.status = schema.Status.FAILED
-                return
-
-            if not self._upload_caller:
-                return
-            
-            # Upload output to S3.
-            # Note that if upload failed, base64 url will be used.
-            self._response.output, upload_time = self._upload_caller(self._response.output)
-            self._response.metrics["upload_time"] = upload_time
 
     def _send_webhook(self) -> None:
         if not self._webhook_caller:
