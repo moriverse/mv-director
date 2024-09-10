@@ -50,7 +50,7 @@ parser.add_argument("--predict-timeout", type=int, default=1800)
 parser.add_argument(
     "--max-failure-count",
     type=int,
-    default=5,
+    default=None,
     help="Maximum number of consecutive failures before the worker should exit",
 )
 parser.add_argument("--redis-url", type=str, required=True)

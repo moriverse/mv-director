@@ -54,6 +54,8 @@ class Worker:
         self._next_queue_thread.start()
 
     def stop(self) -> None:
+        log.info("Stopping worker report.")
+
         self._should_exit.set()
 
     def join(self) -> None:
@@ -78,6 +80,9 @@ class Worker:
 
             except Empty:
                 pass
+
+            except:
+                log.error("Worker report queue error", exc_info=True)
 
             time.sleep(EVENT_INTERNAL)
 
@@ -112,8 +117,9 @@ class Worker:
                 f"{self.report_url}/status/{self.id}?status={status}"
             )
             resp.raise_for_status()
-        except Exception:
-            log.warn("failed to report worker status")
+
+        except:
+            log.error("failed to report worker status", exc_info=True)
 
     def next_queue(self):
         if not self._can_report():
@@ -131,8 +137,8 @@ class Worker:
                 self.switched = queue != self.queue
                 self.queue = queue
 
-        except Exception as e:
-            log.warn("failed to get next queue", error=e)
+        except:
+            log.error("failed to get next queue", exc_info=True)
 
     def _can_report(self):
         return self.id and self.report_url
