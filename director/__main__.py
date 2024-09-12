@@ -14,6 +14,8 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+from director.background_tasks import BackgroundTasks
+
 from .director import Director
 from .health_checker import Healthchecker, http_fetcher
 from .http import Server, create_app
@@ -65,6 +67,9 @@ config = uvicorn.Config(create_app(events=events), port=4900, log_config=None)
 server = Server(config)
 server.start()
 
+background_tasks = BackgroundTasks()
+background_tasks.start()
+
 healthchecker = Healthchecker(
     events=events,
     fetcher=http_fetcher("http://localhost:5000/health-check"),
@@ -76,6 +81,7 @@ monitor.start()
 
 worker = Worker(
     id=args.worker_id,
+    background_tasks=background_tasks,
     queue=args.queue,
     report_url=args.report_url,
     report_key=args.report_key,
@@ -93,13 +99,15 @@ director = Director(
     max_failure_count=args.max_failure_count,
 )
 
-director.register_shutdown_hook(healthchecker.stop)
 director.register_shutdown_hook(server.stop)
+director.register_shutdown_hook(healthchecker.stop)
 director.register_shutdown_hook(monitor.stop)
 director.register_shutdown_hook(worker.stop)
+director.register_shutdown_hook(background_tasks.stop)
 director.start()
 
 monitor.join()
 healthchecker.join()
 server.join()
 worker.join()
+background_tasks.join()
