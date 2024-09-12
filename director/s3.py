@@ -24,7 +24,7 @@ class UploadParams(BaseModel):
 
 def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
 
-    retry_config = Config(
+    config = Config(
         signature_version="s3v4",
         s3={
             "addressing_style": "virtual",
@@ -39,7 +39,7 @@ def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
         endpoint_url=params.url,
         aws_access_key_id=params.access_key,
         aws_secret_access_key=params.secret_key,
-        config=retry_config,
+        config=config,
     )
 
     def caller(response: List[str]) -> tuple[Optional[List[str]], float]:
