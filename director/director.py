@@ -12,6 +12,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry  # type: ignore
 from typing import Any, Callable, List, Optional, Dict
 
+from director.background_tasks import BackgroundTasks
 from director.s3 import UploadParams, upload_caller
 
 from .event_types import HealthcheckStatus, Webhook
@@ -59,11 +60,13 @@ class Director:
         consume_timeout: int,
         predict_timeout: int,
         max_failure_count: int,
+        background_tasks: Optional[BackgroundTasks] = None,
     ):
         self.events = events
         self.healthchecker = healthchecker
         self.monitor = monitor
         self.worker = worker
+        self.background_tasks = background_tasks
         self.redis_url = redis_url
         self.consume_timeout = consume_timeout
         self.predict_timeout = predict_timeout
@@ -248,6 +251,7 @@ class Director:
                 url=message["webhook"].get("url"),
                 headers=message["webhook"].get("headers"),
                 upload_caller=_upload_caller,
+                background_tasks=self.background_tasks,
             )
 
         tracker = PredictionTracker(

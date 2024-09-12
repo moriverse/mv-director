@@ -13,6 +13,8 @@ from cog.server.response_throttler import ResponseThrottler
 from cog.server.telemetry import current_trace_context
 from cog.server.useragent import get_user_agent
 
+from director.background_tasks import BackgroundTasks
+
 log = structlog.get_logger(__name__)
 
 _response_interval = float(os.environ.get("COG_THROTTLE_RESPONSE_INTERVAL", 0.3))
@@ -20,6 +22,7 @@ _response_interval = float(os.environ.get("COG_THROTTLE_RESPONSE_INTERVAL", 0.3)
 
 def webhook_caller(
     url: str,
+    background_tasks: Optional[BackgroundTasks] = None,
     headers: Dict = None,
     upload_caller: Optional[Callable] = None,
 ) -> Callable[[Any], None]:
@@ -29,7 +32,7 @@ def webhook_caller(
     default_session = requests_session()
     retry_session = requests_session_with_retries()
 
-    def caller(response: Dict) -> None:
+    def _webhook_call(response: Dict) -> None:
         if isinstance(response, Dict):
             response = PredictionResponse(**response)
 
@@ -61,6 +64,12 @@ def webhook_caller(
 
         else:
             log.warn(f"Response being throttled. {response}")
+
+    def caller(response: Dict) -> None:
+        if background_tasks:
+            background_tasks.add_task(_webhook_call, response)
+        else:
+            _webhook_call(response)
 
     return caller
 

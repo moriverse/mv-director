@@ -97,6 +97,7 @@ director = Director(
     consume_timeout=args.consume_timeout,
     predict_timeout=args.predict_timeout,
     max_failure_count=args.max_failure_count,
+    background_tasks=background_tasks,
 )
 
 director.register_shutdown_hook(server.stop)

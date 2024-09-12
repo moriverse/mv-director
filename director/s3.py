@@ -54,7 +54,7 @@ def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
                 if not object_key:
                     # Compute the md5 hash from image_data as object key.
                     object_key = hashlib.md5(image_data).hexdigest()
-                    
+
                     # Add extension if possible.
                     ext = mimetypes.guess_extension(content_type)
                     if ext:
@@ -84,11 +84,10 @@ def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
         for base64_url in response:
             url = upload(base64_url)
             urls.append(url)
-        
+
         elapsed_time = time.time() - start_time
-        log.info(f"Results uploaded in {elapsed_time} seconds")
+        log.info(f"Results uploaded in {elapsed_time:.2f} seconds")
 
         return urls, elapsed_time
-
 
     return caller

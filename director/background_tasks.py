@@ -1,4 +1,5 @@
 import queue
+import time
 import threading
 import typing as t
 import structlog
@@ -8,8 +9,6 @@ from attrs import define
 log = structlog.get_logger(__name__)
 
 P = t.ParamSpec("P")
-
-import time
 
 
 class BackgroundTasks:
@@ -46,7 +45,6 @@ class BackgroundTasks:
 
             elif isinstance(msg, _BackgroundTask):
                 try:
-                    time.sleep(3)
                     msg()
 
                 except:
@@ -81,4 +79,12 @@ class _BackgroundTask:
         self.kwargs = kwargs
 
     def __call__(self) -> None:
+
+        start_time = time.perf_counter()
+
         self.func(*self.args, **self.kwargs)
+
+        elapsed_time = time.perf_counter() - start_time
+        log.info(
+            f"[Background task]{self.func.__name__} executed in {elapsed_time:.2f}s"
+        )
