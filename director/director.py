@@ -243,7 +243,10 @@ class Director:
                 _upload_caller = upload_caller(params)
 
             except Exception as e:
-                log.error(f"Cannot parse upload params. {_upload_params}")
+                log.error(
+                    f"Cannot parse upload params. {_upload_params}",
+                    exc_info=True,
+                )
 
         _webhook_caller = None
         if message.get("webhook") is not None:
