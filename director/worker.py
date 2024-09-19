@@ -9,7 +9,7 @@ from director.webhook import requests_session
 
 log = structlog.get_logger(__name__)
 
-NEXT_QUEUE_INTERVAL: float = 30.0
+NEXT_QUEUE_INTERVAL: float = 15.0
 
 
 class Worker:
