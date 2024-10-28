@@ -89,7 +89,7 @@ def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
 
         if isinstance(response, list):
             result = []
-            for base64_url in response.get(key, []):
+            for base64_url in response:
                 result.append(upload(base64_url))
 
         elif isinstance(response, dict):
