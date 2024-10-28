@@ -7,7 +7,7 @@ import time
 
 from botocore.config import Config
 from pydantic import BaseModel
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List, Dict, Optional
 
 log = structlog.get_logger(__name__)
 
@@ -42,7 +42,9 @@ def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
         config=config,
     )
 
-    def caller(response: List[str]) -> tuple[Optional[List[str]], float]:
+    def caller(
+        response: Dict[str, Any] | List[str],
+    ) -> tuple[Optional[Dict[str, Any]], float]:
         def upload(base64_url: str):
             try:
                 # Extract the content type from the base64 URL
@@ -83,15 +85,29 @@ def upload_caller(params: UploadParams) -> Callable[[Any], Optional[str]]:
 
         log.info("Uploading results.")
 
-        urls = []
         start_time = time.time()
-        for base64_url in response:
-            url = upload(base64_url)
-            urls.append(url)
+
+        if isinstance(response, list):
+            result = []
+            for base64_url in response.get(key, []):
+                result.append(upload(base64_url))
+
+        elif isinstance(response, dict):
+            result = {}
+            for key in response.keys():
+                urls = []
+                for base64_url in response.get(key, []):
+                    url = upload(base64_url)
+                    urls.append(url)
+
+                result[key] = urls
+
+        else:
+            result = response
 
         elapsed_time = time.time() - start_time
         log.info(f"Results uploaded in {elapsed_time:.2f} seconds")
 
-        return urls, elapsed_time
+        return result, elapsed_time
 
     return caller
